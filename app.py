@@ -42,7 +42,19 @@ def start_scrape():
     email = request.form.get('email')
     password = request.form.get('password')
     companies_input = request.form.get('companies')
-    keywords = request.form.get('selected-keywords', '').split(',') if request.form.get('selected-keywords') else []
+    
+    # Process keywords with enhanced handling
+    keywords_input = request.form.getlist('keywords')
+    
+    # Handle multiple formats of keywords
+    keywords = []
+    for k in keywords_input:
+        if ',' in k:
+            # Split comma-separated values
+            keywords.extend([part.strip() for part in k.split(',') if part.strip()])
+        elif k.strip():
+            # Add single keywords
+            keywords.append(k.strip())
     
     # Validate inputs
     if not email or not password:
@@ -50,6 +62,9 @@ def start_scrape():
         
     if not keywords:
         return jsonify({'status': 'error', 'message': 'At least one keyword is required'}), 400
+    
+    # Log the processed keywords for debugging
+    app.logger.info(f"Web task starting with keywords: {keywords}")
     
     # Process companies input (either direct input or file upload)
     companies = []
@@ -66,7 +81,6 @@ def start_scrape():
             # Process uploaded file based on extension
             if filename.endswith('.csv'):
                 try:
-                    import pandas as pd
                     df = pd.read_csv(file_path)
                     if 'linkedin_company_name' in df.columns:
                         companies = df['linkedin_company_name'].dropna().unique().tolist()
@@ -111,7 +125,6 @@ def start_scrape():
         'message': 'Scraping task started',
         'task_id': task_id
     })
-
 @app.route('/task_status/<task_id>', methods=['GET'])
 def task_status(task_id):
     if task_id not in active_tasks:
@@ -157,8 +170,8 @@ if __name__ == '__main__':
         print(f"Store this key securely. It will be required to access the API.\n")
     
     # Start the Flask application
-    host = '127.0.0.1'
-    port = 5000
+    host = '0.0.0.0'
+    port = 5001
     url = f"http://{host}:{port}"
     print(f"\n✨ LinkedIn People Scraper is running!")
     print(f"🌐 Access the application at: {url}")

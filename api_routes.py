@@ -138,13 +138,28 @@ def start_task():
     if not companies:
         return jsonify({'status': 'error', 'message': 'No companies provided'}), 400
     
-    # Process keywords
+    # Process keywords - enhanced handling for different formats
     keywords = data.get('keywords', [])
+    
+    # Handle string input (comma-separated)
     if isinstance(keywords, str):
         keywords = [k.strip() for k in keywords.split(',') if k.strip()]
+    # Handle list with comma-separated strings
+    elif isinstance(keywords, list):
+        processed_keywords = []
+        for k in keywords:
+            if isinstance(k, str) and ',' in k:
+                # Split and add each part as a separate keyword
+                processed_keywords.extend([part.strip() for part in k.split(',') if part.strip()])
+            elif k:  # Only add non-empty keywords
+                processed_keywords.append(k)
+        keywords = processed_keywords
     
     if not keywords:
         return jsonify({'status': 'error', 'message': 'At least one keyword is required'}), 400
+    
+    # Log the processed keywords for debugging
+    current_app.logger.info(f"API task starting with keywords: {keywords}")
     
     # Create task
     task_id = generate_task_id()
