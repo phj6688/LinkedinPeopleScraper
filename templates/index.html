@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LinkedIn People Scraper</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --primary-color: #0a66c2;
+            --secondary-color: #0077b5;
+            --accent-color: #00a0dc;
+            --light-color: #f3f6f8;
+            --dark-color: #283e4a;
+            --success-color: #0caa41;
+            --warning-color: #f5c400;
+            --danger-color: #e74c3c;
+            --text-color: #333333;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Roboto', sans-serif;
+            background-color: #fafafa;
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+
+        .navbar {
+            background-color: var(--primary-color);
+        }
+
+        .card {
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+            margin-bottom: 20px;
+            border: none;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .card-header {
+            background-color: var(--light-color);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+            font-weight: 600;
+            border-radius: 10px 10px 0 0 !important;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+
+        .btn-primary:hover {
+            background-color: var(--secondary-color);
+            border-color: var(--secondary-color);
+        }
+
+        .form-control {
+            border-radius: 8px;
+        }
+
+        .form-control:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 0.25rem rgba(10, 102, 194, 0.25);
+        }
+
+        #log-content {
+            height: 250px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-radius: 5px;
+        }
+
+        .log-info {
+            background-color: rgba(10, 102, 194, 0.1);
+        }
+
+        .log-warning {
+            background-color: rgba(245, 196, 0, 0.1);
+        }
+
+        .log-error {
+            background-color: rgba(231, 76, 60, 0.1);
+        }
+
+        .progress {
+            height: 10px;
+            border-radius: 5px;
+        }
+
+        .keyword-badge {
+            background-color: var(--light-color);
+            color: var(--dark-color);
+            margin: 5px;
+            padding: 5px 10px;
+            border-radius: 20px;
+            cursor: pointer;
+            display: inline-block;
+            user-select: none;
+        }
+
+        .keyword-badge.selected {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .tab-content {
+            padding: 20px 0;
+        }
+
+        .tab-pane {
+            animation: fadeEffect 0.5s;
+        }
+
+        @keyframes fadeEffect {
+            from {opacity: 0;}
+            to {opacity: 1;}
+        }
+
+        .stats-card {
+            border-left: 5px solid var(--primary-color);
+            background-color: white;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+
+        #results-section {
+            display: none;
+        }
+
+        .company-tag {
+            background-color: var(--primary-color);
+            color: white;
+            border-radius: 4px;
+            padding: 2px 6px;
+            margin-right: 4px;
+            font-size: 0.8rem;
+        }
+
+        .keyword-tag {
+            background-color: var(--accent-color);
+            color: white;
+            border-radius: 4px;
+            padding: 2px 6px;
+            margin-right: 4px;
+            font-size: 0.8rem;
+        }
+
+        .linkedin-icon {
+            color: var(--primary-color);
+        }
+
+        /* Animation for loader */
+        .loader {
+            display: none;
+            text-align: center;
+            margin: 20px auto;
+        }
+
+        .spinner-border {
+            color: var(--primary-color);
+            width: 3rem;
+            height: 3rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-dark navbar-expand-lg mb-4">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="bi bi-linkedin me-2"></i> LinkedIn People Scraper
+            </a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- Main Content -->
+        <div class="row">
+            <!-- Input Form Section -->
+            <div class="col-lg-12" id="input-section">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Scraper Configuration</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="scrape-form">
+                            <div class="row">
+                                <!-- LinkedIn Credentials -->
+                                <div class="col-md-6 mb-3">
+                                    <div class="card h-100">
+                                        <div class="card-header">
+                                            <i class="bi bi-shield-lock me-2"></i>LinkedIn Credentials
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="mb-3">
+                                                <label for="email" class="form-label">LinkedIn Email</label>
+                                                <input type="email" class="form-control" id="email" name="email" required>
+                                                <div class="form-text">Your LinkedIn login email</div>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="password" class="form-label">LinkedIn Password</label>
+                                                <input type="password" class="form-control" id="password" name="password" required>
+                                                <div class="form-text">Your LinkedIn login password (not stored)</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Companies Input -->
+                                <div class="col-md-6 mb-3">
+                                    <div class="card h-100">
+                                        <div class="card-header">
+                                            <i class="bi bi-building me-2"></i>Target Companies
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="mb-3">
+                                                <label for="companies" class="form-label">Company Handles</label>
+                                                <textarea class="form-control" id="companies" name="companies" rows="3" placeholder="Enter company handles separated by commas (e.g., microsoft, apple, google)"></textarea>
+                                                <div class="form-text">Enter LinkedIn company handles separated by commas</div>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="company_file" class="form-label">Or Upload CSV/TXT File</label>
+                                                <input type="file" class="form-control" id="company_file" name="company_file" accept=".csv,.txt">
+                                                <div class="form-text">Upload a CSV with a 'linkedin_company_name' column or a TXT file with one company per line</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Keywords Selection -->
+                            <div class="row mt-3">
+                                <div class="col-12">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <i class="bi bi-tags me-2"></i>Keywords
+                                        </div>
+                                        <div class="card-body">
+                                            <p class="mb-2">Select keywords to search for in profiles:</p>
+                                            <div id="keywords-container">
+                                                {% if keywords %}
+                                                    {% for keyword in keywords %}
+                                                        <div class="keyword-badge" data-value="{{ keyword }}">{{ keyword }}</div>
+                                                    {% endfor %}
+                                                {% else %}
+                                                    <div class="alert alert-warning">No keywords found in keywords.txt file.</div>
+                                                {% endif %}
+                                            </div>
+                                            <input type="hidden" id="selected-keywords" name="keywords">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row mt-4">
+                                <div class="col-12 text-center">
+                                    <button type="submit" class="btn btn-primary btn-lg px-5">
+                                        <i class="bi bi-search me-2"></i>Start Scraping
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Progress Section (initially hidden) -->
+            <div class="col-lg-12" id="progress-section" style="display: none;">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Scraping Progress</h5>
+                        <button id="back-to-input" class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-arrow-left me-1"></i>Back to Input
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-4">
+                            <h6>Progress:</h6>
+                            <div class="progress mb-2">
+                                <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                            </div>
+                            <p id="progress-text" class="text-center mt-2">0%</p>
+                        </div>
+
+                        <h6>Activity Log:</h6>
+                        <div id="log-content" class="mb-3"></div>
+
+                        <div id="loader" class="loader">
+                            <div class="spinner-border" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2">Processing data...</p>
+                        </div>
+
+                        <div class="text-center" id="download-container" style="display: none;">
+                            <a id="download-link" href="#" class="btn btn-success">
+                                <i class="bi bi-download me-2"></i>Download Results
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results & Statistics Section (initially hidden) -->
+            <div class="col-lg-12" id="results-section" style="display: none;">
+                <div class="card">
+                    <div class="card-header">
+                        <ul class="nav nav-tabs card-header-tabs" id="results-tabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="stats-tab" data-bs-toggle="tab" data-bs-target="#stats" type="button" role="tab">Statistics</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="top-profiles-tab" data-bs-toggle="tab" data-bs-target="#top-profiles" type="button" role="tab">Top Profiles</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="keywords-tab" data-bs-toggle="tab" data-bs-target="#keywords-analytics" type="button" role="tab">Keywords</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="companies-tab" data-bs-toggle="tab" data-bs-target="#companies-analytics" type="button" role="tab">Companies</button>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="card-body">
+                        <div class="tab-content" id="results-tabs-content">
+                            <!-- Basic Stats Tab -->
+                            <div class="tab-pane fade show active" id="stats" role="tabpanel" aria-labelledby="stats-tab">
+                                <div class="row">
+                                    <div class="col-md-6 mb-4">
+                                        <div class="stats-card">
+                                            <h5>Companies Searched</h5>
+                                            <h2 id="total-companies">0</h2>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 mb-4">
+                                        <div class="stats-card">
+                                            <h5>Keywords Used</h5>
+                                            <h2 id="total-keywords">0</h2>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 mb-4">
+                                        <div class="stats-card">
+                                            <h5>Total Profiles Found</h5>
+                                            <h2 id="total-profiles">0</h2>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 mb-4">
+                                        <div class="stats-card">
+                                            <h5>Unique Profiles</h5>
+                                            <h2 id="unique-profiles">0</h2>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Top Profiles Tab -->
+                            <div class="tab-pane fade" id="top-profiles" role="tabpanel" aria-labelledby="top-profiles-tab">
+                                <h5 class="mb-3">Top Profiles with Most Keyword Matches</h5>
+                                <div class="table-responsive">
+                                    <table class="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Name</th>
+                                                <th>Profile URL</th>
+                                                <th>Matches</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="top-profiles-table">
+                                            <!-- Will be populated by JavaScript -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Keywords Tab -->
+                            <div class="tab-pane fade" id="keywords-analytics" role="tabpanel" aria-labelledby="keywords-tab">
+                                <h5 class="mb-3">Keyword Effectiveness</h5>
+                                <div class="table-responsive">
+                                    <table class="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Keyword</th>
+                                                <th>Profiles Found</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="keywords-table">
+                                            <!-- Will be populated by JavaScript -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Companies Tab -->
+                            <div class="tab-pane fade" id="companies-analytics" role="tabpanel" aria-labelledby="companies-tab">
+                                <h5 class="mb-3">Top Companies by Profile Count</h5>
+                                <div class="table-responsive">
+                                    <table class="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Company</th>
+                                                <th>Profiles Found</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="companies-table">
+                                            <!-- Will be populated by JavaScript -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer class="my-5 text-center text-muted">
+            <p>LinkedIn People Scraper &copy; 2025</p>
+        </footer>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const scrapeForm = document.getElementById('scrape-form');
+            const inputSection = document.getElementById('input-section');
+            const progressSection = document.getElementById('progress-section');
+            const resultsSection = document.getElementById('results-section');
+            const progressBar = document.getElementById('progress-bar');
+            const progressText = document.getElementById('progress-text');
+            const logContent = document.getElementById('log-content');
+            const loader = document.getElementById('loader');
+            const downloadContainer = document.getElementById('download-container');
+            const downloadLink = document.getElementById('download-link');
+            const backToInput = document.getElementById('back-to-input');
+            
+            // Keywords selection
+            const keywordBadges = document.querySelectorAll('.keyword-badge');
+            const selectedKeywordsInput = document.getElementById('selected-keywords');
+            
+            keywordBadges.forEach(badge => {
+                badge.addEventListener('click', function() {
+                    this.classList.toggle('selected');
+                    updateSelectedKeywords();
+                });
+            });
+            
+            function updateSelectedKeywords() {
+                const selectedKeywords = [];
+                document.querySelectorAll('.keyword-badge.selected').forEach(badge => {
+                    selectedKeywords.push(badge.getAttribute('data-value'));
+                });
+                selectedKeywordsInput.value = selectedKeywords.join(',');
+            }
+            
+            // Form submission
+            scrapeForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                // Validate form
+                if (!validateForm()) {
+                    return;
+                }
+                
+                // Show progress section
+                inputSection.style.display = 'none';
+                progressSection.style.display = 'block';
+                logContent.innerHTML = '';
+                
+                // Prepare form data
+                const formData = new FormData(scrapeForm);
+                
+                // Send scrape request
+                fetch('/start_scrape', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        addLogEntry(`Task started with ID: ${data.task_id}`, 'info');
+                        pollTaskStatus(data.task_id);
+                    } else {
+                        addLogEntry(`Error: ${data.message}`, 'error');
+                    }
+                })
+                .catch(error => {
+                    addLogEntry(`Error: ${error.message}`, 'error');
+                });
+            });
+            
+            function validateForm() {
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                const companies = document.getElementById('companies').value;
+                const companyFile = document.getElementById('company_file').files[0];
+                const selectedKeywords = selectedKeywordsInput.value;
+                
+                // Validate LinkedIn credentials
+                if (!email || !password) {
+                    alert('LinkedIn credentials are required');
+                    return false;
+                }
+                
+                // Validate companies
+                if (!companies && !companyFile) {
+                    alert('Please enter company handles or upload a file');
+                    return false;
+                }
+                
+                // Validate keywords
+                if (!selectedKeywords) {
+                    alert('Please select at least one keyword');
+                    return false;
+                }
+                
+                return true;
+            }
+            
+            // Task status polling
+            function pollTaskStatus(taskId) {
+                let pollingInterval = setInterval(() => {
+                    fetch(`/task_status/${taskId}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            updateProgress(data);
+                            
+                            if (data.status === 'completed' || data.status === 'failed') {
+                                clearInterval(pollingInterval);
+                                if (data.status === 'completed') {
+                                    downloadLink.href = `/download/${taskId}`;
+                                    downloadContainer.style.display = 'block';
+                                    
+                                    // Display statistics if available
+                                    if (data.statistics) {
+                                        showResults(data.statistics);
+                                    }
+                                }
+                            }
+                        })
+                        .catch(error => {
+                            addLogEntry(`Error polling status: ${error.message}`, 'error');
+                            clearInterval(pollingInterval);
+                        });
+                }, 2000); // Poll every 2 seconds
+            }
+            
+            // Update progress UI
+            function updateProgress(data) {
+                // Update progress bar
+                if (data.progress !== undefined) {
+                    progressBar.style.width = `${data.progress}%`;
+                    progressText.textContent = `${Math.round(data.progress)}%`;
+                }
+                
+                // Update logs
+                if (data.logs && Array.isArray(data.logs)) {
+                    // First, check if we have new logs
+                    const currentLogCount = logContent.querySelectorAll('.log-entry').length;
+                    
+                    if (data.logs.length > currentLogCount) {
+                        // Append only new logs
+                        for (let i = currentLogCount; i < data.logs.length; i++) {
+                            addLogEntry(data.logs[i].message, determineLogLevel(data.logs[i].message));
+                        }
+                    }
+                }
+                
+                // Update status
+                if (data.status) {
+                    if (data.status === 'running') {
+                        loader.style.display = 'block';
+                    } else {
+                        loader.style.display = 'none';
+                        
+                        if (data.status === 'completed') {
+                            progressBar.classList.remove('progress-bar-animated');
+                            progressBar.classList.remove('progress-bar-striped');
+                            progressBar.classList.add('bg-success');
+                            addLogEntry('Task completed successfully!', 'info');
+                        } else if (data.status === 'failed') {
+                            progressBar.classList.remove('progress-bar-animated');
+                            progressBar.classList.remove('progress-bar-striped');
+                            progressBar.classList.add('bg-danger');
+                            addLogEntry('Task failed!', 'error');
+                        }
+                    }
+                }
+            }
+            
+            function determineLogLevel(message) {
+                const lowerMessage = message.toLowerCase();
+                if (lowerMessage.includes('error') || lowerMessage.includes('failed')) {
+                    return 'error';
+                } else if (lowerMessage.includes('warning') || lowerMessage.includes('timeout')) {
+                    return 'warning';
+                }
+                return 'info';
+            }
+            
+            function addLogEntry(message, level) {
+                const entry = document.createElement('div');
+                entry.className = `log-entry log-${level}`;
+                entry.textContent = message;
+                logContent.appendChild(entry);
+                logContent.scrollTop = logContent.scrollHeight;
+            }
+            
+            // Display results
+            function showResults(statistics) {
+                resultsSection.style.display = 'block';
+                
+                // Update basic stats
+                document.getElementById('total-companies').textContent = statistics.basic_stats.total_companies;
+                document.getElementById('total-keywords').textContent = statistics.basic_stats.total_keywords;
+                document.getElementById('total-profiles').textContent = statistics.basic_stats.total_profiles;
+                document.getElementById('unique-profiles').textContent = statistics.basic_stats.unique_profiles;
+                
+                // Update top profiles table
+                const topProfilesTable = document.getElementById('top-profiles-table');
+                topProfilesTable.innerHTML = '';
+                statistics.top_profiles.forEach(profile => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${profile.name}</td>
+                        <td><a href="${profile.href}" target="_blank" class="text-primary">${profile.href}</a></td>
+                        <td><span class="badge bg-primary">${profile.count}</span></td>
+                    `;
+                    topProfilesTable.appendChild(row);
+                });
+                
+                // Update keywords table
+                const keywordsTable = document.getElementById('keywords-table');
+                keywordsTable.innerHTML = '';
+                statistics.keyword_effectiveness.forEach(keyword => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td><span class="keyword-tag">${keyword.keyword}</span></td>
+                        <td>${keyword.count}</td>
+                    `;
+                    keywordsTable.appendChild(row);
+                });
+                
+                // Update companies table
+                const companiesTable = document.getElementById('companies-table');
+                companiesTable.innerHTML = '';
+                statistics.top_companies.forEach(company => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td><span class="company-tag">${company.company}</span></td>
+                        <td>${company.count}</td>
+                    `;
+                    companiesTable.appendChild(row);
+                });
+            }
+            
+            // Back button
+            backToInput.addEventListener('click', function() {
+                progressSection.style.display = 'none';
+                resultsSection.style.display = 'none';
+                inputSection.style.display = 'block';
+                
+                // Reset progress UI
+                progressBar.style.width = '0%';
+                progressBar.classList.add('progress-bar-animated');
+                progressBar.classList.add('progress-bar-striped');
+                progressBar.classList.remove('bg-success');
+                progressBar.classList.remove('bg-danger');
+                progressText.textContent = '0%';
+                logContent.innerHTML = '';
+                loader.style.display = 'none';
+                downloadContainer.style.display = 'none';
+            });
+        });
+    </script>
+</body>
+</html>
