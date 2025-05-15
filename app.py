@@ -4,6 +4,12 @@ import asyncio
 from flask import Flask, render_template, request, jsonify, send_file
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
+from werkzeug.middleware.dispatcher import DispatcherMiddleware
+from werkzeug.serving import run_simple
+import traceback
+import logging
+from logging.handlers import RotatingFileHandler
+from datetime import datetime, timedelta
 
 # Import shared functionality from common module
 from common import (
@@ -14,10 +20,15 @@ from common import (
 
 # === CONFIG ===
 app = Flask(__name__)
+
+from werkzeug.middleware.proxy_fix import ProxyFix
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_key_change_in_production')
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload size
 app.config['ALLOWED_EXTENSIONS'] = {'csv', 'txt'}
+app.config['APPLICATION_ROOT'] = '/linkedinpeoplescraper'
 
 # Enable CORS
 CORS(app)
@@ -26,11 +37,42 @@ CORS(app)
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs('logs', exist_ok=True)
 
+# Improved logging with rotation
+handler = RotatingFileHandler('logs/scraper.log', maxBytes=2*1024*1024, backupCount=5)
+handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s')
+handler.setFormatter(formatter)
+if not app.logger.handlers:
+    app.logger.addHandler(handler)
+
+RATE_LIMIT_SECONDS = 60
+last_scrape_time = {}
+
 # === UTILS ===
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
 # === ROUTES ===
+@app.errorhandler(Exception)
+def handle_exception(e):
+    app.logger.error(f"Exception: {str(e)}\n{traceback.format_exc()}")
+    response = {
+        'status': 'error',
+        'message': str(e),
+        'trace': traceback.format_exc()
+    }
+    return jsonify(response), 500
+
+@app.before_request
+def log_request_info():
+    app.logger.info(f"Incoming request: {request.method} {request.path} | Args: {request.args} | Form: {request.form}")
+
+@app.before_request
+def detect_script_name():
+    script_name = request.headers.get('X-Forwarded-Prefix')
+    if script_name:
+        request.environ['SCRIPT_NAME'] = script_name
+
 @app.route('/')
 def index():
     keywords = load_keywords_from_file()
@@ -38,11 +80,17 @@ def index():
 
 @app.route('/start_scrape', methods=['POST'])
 def start_scrape():
+    user_ip = request.remote_addr
+    now = datetime.utcnow()
+    if user_ip in last_scrape_time and (now - last_scrape_time[user_ip]).total_seconds() < RATE_LIMIT_SECONDS:
+        return jsonify({'status': 'error', 'message': f'Rate limit: Please wait {RATE_LIMIT_SECONDS} seconds between scrapes.'}), 429
+    last_scrape_time[user_ip] = now
+
     # Get form data
     email = request.form.get('email')
     password = request.form.get('password')
     companies_input = request.form.get('companies')
-    keywords = request.form.get('selected-keywords', '').split(',') if request.form.get('selected-keywords') else []
+    keywords = request.form.get('keywords', '').split(',') if request.form.get('keywords') else []
     
     # Validate inputs
     if not email or not password:
@@ -82,6 +130,19 @@ def start_scrape():
     if not companies:
         return jsonify({'status': 'error', 'message': 'No companies provided'}), 400
     
+    # Clean up old files (uploads and outputs older than 1 day)
+    cutoff = datetime.utcnow() - timedelta(days=1)
+    for folder in [app.config['UPLOAD_FOLDER'], '.']:
+        for fname in os.listdir(folder):
+            if fname.startswith('output_') or fname.endswith('.csv') or fname.endswith('.txt'):
+                fpath = os.path.join(folder, fname)
+                try:
+                    mtime = datetime.utcfromtimestamp(os.path.getmtime(fpath))
+                    if mtime < cutoff:
+                        os.remove(fpath)
+                except Exception:
+                    pass
+
     # Create a task ID and setup the task
     task_id = generate_task_id()
     output_file = f"output_{task_id}.csv"
@@ -134,8 +195,6 @@ def download_results(task_id):
     if not os.path.exists(output_file):
         return jsonify({'status': 'error', 'message': 'Output file not found'}), 404
     
-    from datetime import datetime
-    
     return send_file(
         output_file,
         mimetype='text/csv',
@@ -147,6 +206,11 @@ def download_results(task_id):
 from api_routes import api_bp
 app.register_blueprint(api_bp)
 
+# Mount at /linkedinpeoplescraper using DispatcherMiddleware
+application = DispatcherMiddleware(Flask('dummy'), {
+    '/linkedinpeoplescraper': app
+})
+
 if __name__ == '__main__':
     # Generate a default API key if none exists
     from api_keys import load_api_keys, create_api_key
@@ -156,12 +220,11 @@ if __name__ == '__main__':
         print(f"\n🔑 Default API Key: {default_key}")
         print(f"Store this key securely. It will be required to access the API.\n")
     
-    # Start the Flask application
-    host = '127.0.0.1'
+    # Start the Flask application with DispatcherMiddleware
+    host = '0.0.0.0'
     port = 5000
-    url = f"http://{host}:{port}"
     print(f"\n✨ LinkedIn People Scraper is running!")
-    print(f"🌐 Access the application at: {url}")
-    print(f"🔌 API is available at: {url}/api/v1/status")
+    print(f"🌐 Access the application at: https://apps.peyman.io/linkedinpeoplescraper/")
+    print(f"🔌 API is available at: https://apps.peyman.io/linkedinpeoplescraper/api/v1/status")
     print(f"📋 Press CTRL+C to quit\n")
-    app.run(debug=True, host=host, port=port)
+    run_simple(host, port, application)
