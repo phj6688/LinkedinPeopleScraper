@@ -218,6 +218,7 @@
                                                 <input type="password" class="form-control" id="password" name="password" required>
                                                 <div class="form-text">Your LinkedIn login password (not stored)</div>
                                             </div>
+                                            <div class="alert alert-info mt-3">Your LinkedIn credentials are used only for this session and are not stored. For best security, use a dedicated LinkedIn account.</div>
                                         </div>
                                     </div>
                                 </div>
@@ -262,7 +263,7 @@
                                                     <div class="alert alert-warning">No keywords found in keywords.txt file.</div>
                                                 {% endif %}
                                             </div>
-                                            <input type="hidden" id="selected-keywords" name="keywords">
+                                            <input type="hidden" id="keywords" name="keywords">
                                         </div>
                                     </div>
                                 </div>
@@ -275,6 +276,7 @@
                                     </button>
                                 </div>
                             </div>
+                            <div class="alert alert-warning mt-3">To avoid LinkedIn account lockout, do not run too many scrapes in a short period. Wait a few minutes between runs.</div>
                         </form>
                     </div>
                 </div>
@@ -450,7 +452,7 @@
             
             // Keywords selection
             const keywordBadges = document.querySelectorAll('.keyword-badge');
-            const selectedKeywordsInput = document.getElementById('selected-keywords');
+            const selectedKeywordsInput = document.getElementById('keywords');
             
             keywordBadges.forEach(badge => {
                 badge.addEventListener('click', function() {
@@ -485,7 +487,7 @@
                 const formData = new FormData(scrapeForm);
                 
                 // Send scrape request
-                fetch('/start_scrape', {
+                fetch('/linkedinpeoplescraper/start_scrape', {
                     method: 'POST',
                     body: formData
                 })
@@ -495,11 +497,11 @@
                         addLogEntry(`Task started with ID: ${data.task_id}`, 'info');
                         pollTaskStatus(data.task_id);
                     } else {
-                        addLogEntry(`Error: ${data.message}`, 'error');
+                        showError(`Error: ${data.message}`);
                     }
                 })
                 .catch(error => {
-                    addLogEntry(`Error: ${error.message}`, 'error');
+                    showError(`Error: ${error.message}`);
                 });
             });
             
@@ -512,19 +514,19 @@
                 
                 // Validate LinkedIn credentials
                 if (!email || !password) {
-                    alert('LinkedIn credentials are required');
+                    showError('LinkedIn credentials are required');
                     return false;
                 }
                 
                 // Validate companies
                 if (!companies && !companyFile) {
-                    alert('Please enter company handles or upload a file');
+                    showError('Please enter company handles or upload a file');
                     return false;
                 }
                 
                 // Validate keywords
                 if (!selectedKeywords) {
-                    alert('Please select at least one keyword');
+                    showError('Please select at least one keyword');
                     return false;
                 }
                 
@@ -533,8 +535,9 @@
             
             // Task status polling
             function pollTaskStatus(taskId) {
+                localStorage.setItem('lastTaskId', taskId);
                 let pollingInterval = setInterval(() => {
-                    fetch(`/task_status/${taskId}`)
+                    fetch(`/linkedinpeoplescraper/task_status/${taskId}`)
                         .then(response => response.json())
                         .then(data => {
                             updateProgress(data);
@@ -542,7 +545,7 @@
                             if (data.status === 'completed' || data.status === 'failed') {
                                 clearInterval(pollingInterval);
                                 if (data.status === 'completed') {
-                                    downloadLink.href = `/download/${taskId}`;
+                                    downloadLink.href = `/linkedinpeoplescraper/download/${taskId}`;
                                     downloadContainer.style.display = 'block';
                                     
                                     // Display statistics if available
@@ -553,7 +556,7 @@
                             }
                         })
                         .catch(error => {
-                            addLogEntry(`Error polling status: ${error.message}`, 'error');
+                            showError(`Error polling status: ${error.message}`);
                             clearInterval(pollingInterval);
                         });
                 }, 2000); // Poll every 2 seconds
@@ -619,6 +622,11 @@
                 logContent.appendChild(entry);
                 logContent.scrollTop = logContent.scrollHeight;
             }
+
+            function showError(message) {
+                alert(message);
+                addLogEntry(message, 'error');
+            }
             
             // Display results
             function showResults(statistics) {
@@ -629,7 +637,24 @@
                 document.getElementById('total-keywords').textContent = statistics.basic_stats.total_keywords;
                 document.getElementById('total-profiles').textContent = statistics.basic_stats.total_profiles;
                 document.getElementById('unique-profiles').textContent = statistics.basic_stats.unique_profiles;
-                
+
+                // Show a message if no profiles found
+                if (statistics.basic_stats.total_profiles === 0) {
+                    const statsTab = document.getElementById('stats');
+                    let msg = document.getElementById('no-results-msg');
+                    if (!msg) {
+                        msg = document.createElement('div');
+                        msg.id = 'no-results-msg';
+                        msg.className = 'alert alert-warning mt-3';
+                        msg.textContent = 'No profiles found. Try different companies/keywords or check your LinkedIn login.';
+                        statsTab.appendChild(msg);
+                    }
+                    downloadContainer.style.display = 'block'; // Still allow download (may be empty)
+                } else {
+                    const msg = document.getElementById('no-results-msg');
+                    if (msg) msg.remove();
+                }
+
                 // Update top profiles table
                 const topProfilesTable = document.getElementById('top-profiles-table');
                 topProfilesTable.innerHTML = '';
@@ -642,7 +667,7 @@
                     `;
                     topProfilesTable.appendChild(row);
                 });
-                
+
                 // Update keywords table
                 const keywordsTable = document.getElementById('keywords-table');
                 keywordsTable.innerHTML = '';
@@ -654,7 +679,7 @@
                     `;
                     keywordsTable.appendChild(row);
                 });
-                
+
                 // Update companies table
                 const companiesTable = document.getElementById('companies-table');
                 companiesTable.innerHTML = '';
@@ -685,6 +710,17 @@
                 loader.style.display = 'none';
                 downloadContainer.style.display = 'none';
             });
+
+            const lastTaskId = localStorage.getItem('lastTaskId');
+            if (lastTaskId) {
+                if (confirm('Resume last scraping task?')) {
+                    pollTaskStatus(lastTaskId);
+                    inputSection.style.display = 'none';
+                    progressSection.style.display = 'block';
+                } else {
+                    localStorage.removeItem('lastTaskId');
+                }
+            }
         });
     </script>
 </body>

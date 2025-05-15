@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  linkedin-scraper:
+    build: .
+    container_name: linkedin-scraper
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+    environment:
+      - SECRET_KEY=Ne6U3lFCVn4PVXcmQ0OlXjpUPwMVdUt3ofYz-SQldNI
+    restart: unless-stopped
