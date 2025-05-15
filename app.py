@@ -158,11 +158,17 @@ def start_scrape():
     
     # Start task in a separate thread
     def run_async_task():
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(scrape_linkedin_profiles(task_id, companies, keywords, email, password, output_file))
-        loop.close()
-    
+        try:
+            logger.info(f"[APP] Starting async scrape task for task_id={task_id}")
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(scrape_linkedin_profiles(task_id, companies, keywords, email, password, output_file))
+            loop.close()
+        except Exception as e:
+            logger.error(f"[APP] Exception in run_async_task for task_id={task_id}: {e}\n{traceback.format_exc()}")
+            update_task_status(task_id, "failed", f"Internal error: {str(e)}")
+
+    logger.info(f"[APP] Launching thread for task_id={task_id}")
     thread = threading.Thread(target=run_async_task)
     thread.daemon = True
     thread.start()
@@ -191,12 +197,12 @@ def download_results(task_id):
         return jsonify({'status': 'error', 'message': 'Task not found'}), 404
     
     output_file = active_tasks[task_id]['output_file']
-    
-    if not os.path.exists(output_file):
+    abs_output_file = os.path.abspath(output_file)
+    app.logger.info(f"[DOWNLOAD] Sending file: {abs_output_file}")
+    if not os.path.exists(abs_output_file):
         return jsonify({'status': 'error', 'message': 'Output file not found'}), 404
-    
     return send_file(
-        output_file,
+        abs_output_file,
         mimetype='text/csv',
         as_attachment=True,
         download_name=f"linkedin_profiles_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"

@@ -13,7 +13,7 @@ os.makedirs("logs", exist_ok=True)
 # Common variables
 active_tasks = {}
 NLP = None
-
+PEOPLE_SELECTOR = 'div.artdeco-entity-lockup__title a[href*="/in/"]'
 # Setup logging
 logging.basicConfig(
     filename="logs/scraper.log",
@@ -120,6 +120,7 @@ async def scrape_linkedin_profiles(task_id, companies, keywords, email, password
     """Main scraping coroutine for LinkedIn profiles."""
     from playwright.async_api import async_playwright, TimeoutError
     
+    logger.info(f"[SCRAPER] scrape_linkedin_profiles called for task_id={task_id}, companies={companies}, keywords={keywords}, output_file={output_file}")
     update_task_status(task_id, "running", "Starting LinkedIn scraper...")
     
     output_path = Path(output_file)
@@ -130,31 +131,17 @@ async def scrape_linkedin_profiles(task_id, companies, keywords, email, password
     
     # --- Playwright context setup to match working script ---
     user_agent = (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113 Safari/537.36"
     )
     playwright = await async_playwright().start()
     browser = await playwright.chromium.launch(headless=True, args=[
-        "--disable-blink-features=AutomationControlled",
-        "--disable-infobars",
-        "--disable-extensions",
-        "--disable-gpu",
-        "--no-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-setuid-sandbox",
-        "--disable-web-security",
-        "--disable-features=IsolateOrigins,site-per-process",
+        "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
+        "--disable-blink-features=AutomationControlled"
     ])
     context = await browser.new_context(
         user_agent=user_agent,
-        viewport={"width": 1280, "height": 800},
-        locale="en-US",
-        java_script_enabled=True,
-        ignore_https_errors=True,
-        extra_http_headers={
-            "Accept-Language": "en-US,en;q=0.9",
-        },
+        viewport={"width": 1280, "height": 800}
     )
     page = await context.new_page()
 
@@ -205,60 +192,50 @@ async def scrape_linkedin_profiles(task_id, companies, keywords, email, password
                     )
                     await page.goto(url, wait_until="domcontentloaded")
                     await asyncio.sleep(random.uniform(2, 3))
-                    # Wait for people list using robust selector (as in working script)
+                    await _handle_cookies_and_remove_selectors(page)
+                    await _full_page_scroll(page)
+                    # Wait for a general container, not the profile link itself
                     try:
-                        await page.wait_for_selector("ul.org-people-profiles-module__profile-list, div.scaffold-finite-scroll__content ul", timeout=15000)
-                        await _full_page_scroll(page)
-                        # Try both selectors for maximum compatibility
-                        ul_selector = None
-                        if await page.is_visible("ul.org-people-profiles-module__profile-list"):
-                            ul_selector = "ul.org-people-profiles-module__profile-list"
-                        elif await page.is_visible("div.scaffold-finite-scroll__content ul"):
-                            ul_selector = "div.scaffold-finite-scroll__content ul"
-                        if ul_selector:
-                            pymk_ul = page.locator(ul_selector).first
-                            profile_links = await pymk_ul.locator("a[href*='/in/']").evaluate_all("""
-                                els => els.map(e => ({
-                                    href: e.href.split('?')[0],
-                                    name: e.textContent.trim().split('\n')[0]
-                                }))
-                            """)
-                            cleaned = [p for p in profile_links if p['name'] and p['href']]
-                            update_task_status(
-                                task_id,
-                                "running",
-                                f"Found {len(cleaned)} profiles for {company} with keyword '{key}'",
-                                (current_step / total_steps) * 100
-                            )
-                            if cleaned:
-                                # Filter by real person names
-                                filtered_data = [entry for entry in cleaned if is_person_name(entry['name'])]
-                                if filtered_data:
-                                    df = pd.DataFrame(filtered_data)
-                                    df['company'] = company
-                                    df['keyword'] = key
-                                    df['url'] = url
-                                    df.to_csv(output_path, mode='a', header=not output_path.exists(), index=False)
-                                    update_task_status(
-                                        task_id,
-                                        "running",
-                                        f"Saved {len(filtered_data)} profiles for {company} with keyword '{key}'",
-                                        (current_step / total_steps) * 100
-                                    )
-                        else:
-                            update_task_status(
-                                task_id,
-                                "running",
-                                f"No people list found for {company} with keyword '{key}' (selectors not found)",
-                                (current_step / total_steps) * 100
-                            )
+                        await page.wait_for_selector(PEOPLE_SELECTOR, timeout=15000)
+                        
+
                     except TimeoutError:
                         update_task_status(
                             task_id,
                             "running",
-                            f"Timeout on {url} - No profiles found or page structure changed",
+                            f"No people section found for {company} with keyword '{key}' (skipping)",
                             (current_step / total_steps) * 100
                         )
+                        continue
+                    await _handle_cookies_and_remove_selectors(page)
+                    await _full_page_scroll(page)                     
+                    await page.wait_for_selector(PEOPLE_SELECTOR, timeout=15_000)  
+
+                    profile_links = await page.eval_on_selector_all(
+                        PEOPLE_SELECTOR,
+                        'els => els.map(e => ({href: e.href.split("?")[0], name: e.textContent.trim()}))'
+                    )
+                    cleaned = [p for p in profile_links if p['name'] and p['href']]
+                    update_task_status(
+                        task_id,
+                        "running",
+                        f"Found {len(cleaned)} profiles for {company} with keyword '{key}'",
+                        (current_step / total_steps) * 100
+                    )
+                    if cleaned:
+                        filtered_data = [entry for entry in cleaned if is_person_name(entry['name'])]
+                        if filtered_data:
+                            df = pd.DataFrame(filtered_data)
+                            df['company'] = company
+                            df['keyword'] = key
+                            df['url'] = url
+                            df.to_csv(output_path, mode='a', header=not output_path.exists(), index=False)
+                            update_task_status(
+                                task_id,
+                                "running",
+                                f"Saved {len(filtered_data)} profiles for {company} with keyword '{key}'",
+                                (current_step / total_steps) * 100
+                            )
                 except Exception as e:
                     logger.error(f"Error scraping {url}: {e}")
                     update_task_status(

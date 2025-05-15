@@ -19,6 +19,7 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 RUN pip install playwright gunicorn
 RUN playwright install 
+RUN playwright install-deps
 
 # Download spaCy model
 RUN python -m spacy download en_core_web_sm
