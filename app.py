@@ -90,23 +90,7 @@ def start_scrape():
     email = request.form.get('email')
     password = request.form.get('password')
     companies_input = request.form.get('companies')
-<<<<<<< HEAD
-    
-    # Process keywords with enhanced handling
-    keywords_input = request.form.getlist('keywords')
-    
-    # Handle multiple formats of keywords
-    keywords = []
-    for k in keywords_input:
-        if ',' in k:
-            # Split comma-separated values
-            keywords.extend([part.strip() for part in k.split(',') if part.strip()])
-        elif k.strip():
-            # Add single keywords
-            keywords.append(k.strip())
-=======
     keywords = request.form.get('keywords', '').split(',') if request.form.get('keywords') else []
->>>>>>> dev/feat/api
     
     # Validate inputs
     if not email or not password:
@@ -243,16 +227,9 @@ if __name__ == '__main__':
         print(f"\n🔑 Default API Key: {default_key}")
         print(f"Store this key securely. It will be required to access the API.\n")
     
-<<<<<<< HEAD
-    # Start the Flask application
-    host = '0.0.0.0'
-    port = 5001
-    url = f"http://{host}:{port}"
-=======
     # Start the Flask application with DispatcherMiddleware
     host = '0.0.0.0'
     port = 5000
->>>>>>> dev/feat/api
     print(f"\n✨ LinkedIn People Scraper is running!")
     print(f"🌐 Access the application at: https://apps.peyman.io/linkedinpeoplescraper/")
     print(f"🔌 API is available at: https://apps.peyman.io/linkedinpeoplescraper/api/v1/status")

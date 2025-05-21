@@ -4,6 +4,7 @@ FROM python:3.11-slim-bullseye
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
+ENV JWT_SECRET_KEY=Ne6U3lFCVn4PVXcmQ0OlXjpUPwMVdUt3ofYz-SQldNI
 
 # Set work directory
 WORKDIR /app
@@ -28,4 +29,4 @@ RUN python -m spacy download en_core_web_sm
 COPY . .
 
 EXPOSE 5000
-CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:5000", "app:application"]
+CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "app:application"]
